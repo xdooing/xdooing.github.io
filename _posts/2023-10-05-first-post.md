@@ -4,14 +4,20 @@ date: 2023-10-05 17:34:00 +0800
 categories: [随笔]
 tags: [生活]
 pin: true
-author: xdooing
+author: 东东狗
 
 toc: true
 comments: true
-typora-root-url: ../../xdooing.github.io
+
 math: false
 mermaid: true
+
+typora-root-url: ../../xdooing.github.io
 ---
+
+
+
+
 
 # 感谢关注～ 
 

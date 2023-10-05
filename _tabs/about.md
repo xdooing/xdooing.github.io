@@ -3,12 +3,15 @@ title: 关于
 icon: fas fa-info
 order: 4
 ---
-- ### Hi there 👋, I'm Tom!
+- ### 本网站为个人编程技术汇总，记录学习过程中遇到的各种问题和相关技术的应用详情
 
-  - 🏫  _BSc in Computer Science_.
-  - 💻  I work on C / C++ / Java / Objective-C & Swift / Python / Markdown.
-  - 🧠  I used to take internship as an iOS developer at Bytedance Techonology.
-  - 🏖️  I will go to Shenzhen and work as a back-end engineer at Tencent.
+  - 🏫  毕业于上海交通大学建筑系
+  - 💻  目前从事EDA软件开发
+  - 🏖️  联系方式：
+    - 微信：shovexdoo
+    - QQ：3410127564
 
-公众号: 汤姆还在写代码
+欢迎一起交流！
+
+
 
