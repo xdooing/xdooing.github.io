@@ -1,5 +1,5 @@
 ---
-title: 第一篇博文
+title: MIT6.824-MapReduce
 date: 2023-10-06 17:34:00 +0800
 categories: [MIT6.824]
 tags: [分布式]
