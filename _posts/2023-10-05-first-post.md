@@ -30,4 +30,3 @@ int main(){
 }
 ```
 
-![](/assets/blog_res/2023-10-05-first-post.assets/faba482abc8bf0055ccfec60e89cf26.jpg)
