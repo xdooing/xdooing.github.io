@@ -21,9 +21,9 @@ timezone:
 # jekyll-seo-tag settings › https://github.com/jekyll/jekyll-seo-tag/blob/master/docs/usage.md
 # ↓ --------------------------
 
-title: xd的Blog                         # the main title
+title: xd的blog                         # the main title
 
-tagline: 思绪来的快去的也快，偶尔在这里停留   # it will display as the sub-title
+tagline: 思绪来得快去得也快，偶尔在这里停留   # it will display as the sub-title
 
 description: >-                        # used by seo meta and the atom feed
     这是通过Chirpy主题配置而成的
