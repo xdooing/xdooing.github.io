@@ -42,7 +42,7 @@ int scanf(const char *format, ...);
 
 ```c
 #include <stdio.h>
-void print(int n, ...) {
+void myPrint(int n, ...) {
     int *p, i;
     p = &n + 1;
     for (i = 0; i < n; i++)
@@ -54,12 +54,12 @@ void print(int n, ...) {
 }
  
 int main() {
-    print(4, 1, 2, 3, 4); // 1 2 3 4
+    myPrint(4, 1, 2, 3, 4); // 1 2 3 4
     return 0;
 }
 ```
 
-以上代码，首先在print函数中使用占位符`...`，因此该函数在编译时被当成变参函数来处理，对该函数调用中的参数将一一进行压栈。上述代码定义了一个int型指针p，由于函数参数的压栈顺序是从右向左，参数的存储的地址由高地址到低地址，所以`p = &n + 1`得到的是指向第一个可变参数的地址，接下来通过循环一一取出函数中的参数。
+以上代码，首先在myPrint函数中使用占位符`...`，因此该函数在编译时被当成变参函数来处理，对该函数调用中的参数将一一进行压栈。上述代码定义了一个int型指针p，由于函数参数的压栈顺序是从右向左，参数的存储的地址由高地址到低地址，所以`p = &n + 1`得到的是指向第一个可变参数的地址，接下来通过循环一一取出函数中的参数。
 
 在使用变参函数时，`...`前面至少要有一个普通的参数。必须知道参数什么时候结束，如果没有给出变参函数的个数，直接结出第一个参数，则必须约定一个参数作为结束标志。
 
@@ -72,19 +72,132 @@ uname -m
 apt-get install gcc-multilib
 ```
 
-安装环境完成后，gcc增加`-m32`参数，表示编译32位架构下的可执行程序，`gcc print.cpp -m32 -o print`
+安装环境完成后，gcc增加`-m32`参数，表示编译32位架构下的可执行程序，`gcc myPrint.cpp -m32 -o myPrint`
 
 而在64位系统中，要实现以上功能，需要借助 <stdarg.h> 头文件中的 va_list 类型以及相关宏函数 va_start()、va_arg() 和 va_end() 来处理可变参数。
 
+```c
+#include<cstdarg>  // C中是<stdarg.h>
+
+// va_list是一种数据类型，args用于持有可变参数。
+va_list args;
+
+// 调用va_start并传入两个参数：第一个参数为va_list类型的变量
+// 第二个参数为"..."前最后一个参数名
+// 将args初始化为指向第一个参数（可变参数列表）
+va_start(args, paramN);
+
+// 检索参数，va_arg的第一个参数是va_list变量，第二个参数指定返回值的类型
+// 每一次调用va_arg会获取当前的参数，并自动更新指向下一个可变参数。
+va_arg(args,type);
+
+// 释放va_list变量
+va_end(args);
+```
+
+接下来实现一下myPrint函数：
+
+```c
+void myPrint(int n, ...) {
+    int i, arg;
+	va_list args;
+    va_start(args, n);
+    for(i = 0; i < n; ++i) {
+        arg = va_arg(args, int);
+        printf("%d ", arg);
+    }
+    printf("\n");
+    va_end(args);
+}
+```
 
 
 
+上述函数可能实现方式为：
+
+```c
+typedef char *va_list;
+#define _INTSIZEOF(n) ((sizeof(n) + sizeof(int) - 1) & ~(sizeof(int) - 1))
+#define va_start(ap, v) (ap = (va_list)&v + _INTSIZEOF(v))
+#define va_arg(ap, t) (*(t *)((ap += _INTSIZEOF(t)) - _INTSIZEOF(t)))
+#define va_end(ap) (ap = (va_list)0)
+```
+
+一个一个来解释：
+
+- `#define _INTSIZEOF(n) ((sizeof(n) + sizeof(int) - 1) & ~(sizeof(int) - 1))`
+
+  > 函数的压栈是按照4字节对齐的，小于4字节的统统按4字节对齐来入栈，而这里的_INTSIZEOF宏，就是用于实现内存中的字节对齐操作。
+
+- `#define va_start(ap, v) (ap = (va_list)&v + _INTSIZEOF(v))`
+
+  > 作用是先得到变量v的地址，然后将其转化成char型指针，再加上v对齐之后所占用的内存大小，使指针指向下一个参数。注意此时的指针为char类型，所以接下来在使用va_arg(ap, t)时要将其强制转换为当前参数类型t的指针。
+
+- `#define va_arg(ap, t) (*(t *)((ap += _INTSIZEOF(t)) - _INTSIZEOF(t)))`
+
+  > `ap += _INTSIZEOF(t)`得到的是下一个参数的地址，再减去_INTSIZEOF(t)得到当前参数的地址。通过一个for循环就可以一一取出其中压栈的所有参数。
+
+- `#define va_end(ap) (ap = (va_list)0)`
+
+  > 清除指针，表示在接下来的部分不再使用该指针变量
 
 
 
+**实现类似printf函数：**
 
+```c
+#include<stdarg.h>
+#include<cstdio>
 
+void myPrintf(const char *fmt, ...) {
+    char c;
+    va_list list;
+    va_start(list, fmt);
+    while (*fmt != '\0') {
+        c = *fmt;
+        if (c != '%') {
+            putchar(c);
+        }else {
+            fmt++;
+            switch (*fmt) {
+            case 'd':
+                printf("%d", va_arg(list, int));        // #1
+                break;
+            case 'f':
+                printf("%f", va_arg(list, double));
+                break;
+            case 's':
+                printf("%s", va_arg(list, const char*));
+                break;
+            default:
+                break;
+            }
+        }
+        fmt++;
+    }
+    va_end(p);
+}
 
+int main() {
+    int a = 5;
+    double d = 3.14;
+    const char* s = "test";
+    myPrintf("a = %d d = %f s = %s\n", a, d, s); // a = 5 d = 3.140000 s = test
+    
+    return 0;
+}
+```
+
+注意上述代码中#1处，64位与32位环境下都可以这样写，但是下面的写法只适用于32位环境：
+
+```c
+case 'd':
+    printf("%d", *((int*)list));
+	va_arg(list, int)；
+    break;
+```
+
+TODO：搞清楚原因。
 
 
 
