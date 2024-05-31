@@ -135,11 +135,24 @@ typedef char *va_list;
 
 - `#define va_arg(ap, t) (*(t *)((ap += _INTSIZEOF(t)) - _INTSIZEOF(t)))`
 
-  > `ap += _INTSIZEOF(t)`得到的是下一个参数的地址，再减去_INTSIZEOF(t)得到当前参数的地址。通过一个for循环就可以一一取出其中压栈的所有参数。
+  > ap += _INTSIZEOF(t)得到的是下一个参数的地址，再减去_INTSIZEOF(t)得到当前参数的地址。通过一个for循环就可以一一取出其中压栈的所有参数。
 
 - `#define va_end(ap) (ap = (va_list)0)`
 
   > 清除指针，表示在接下来的部分不再使用该指针变量
+
+
+
+上述可以用在一般函数上，但是无法使用在宏定义中，如果一定要在宏定义中使用，需要配合 ***\_\_VA_ARGS__***，示例如下：
+
+```c
+//#define CALC(fmt, ...) func(fmt, ...) //错误的使用
+#define CALC(fmt, ...) func(fmt, __VA_ARGS__)
+int main() {
+    CALC("%d %f %s\n", 1, 2.0f, "hello world");
+    return 0;
+}
+```
 
 
 
@@ -193,7 +206,7 @@ int main() {
 ```c
 case 'd':
     printf("%d", *((int*)list));
-	va_arg(list, int)；
+	va_arg(list, int);
     break;
 ```
 
@@ -204,3 +217,108 @@ TODO：搞清楚原因。
 
 
 ## 2. C++可变参数
+
+
+
+### 2.1 可变参数函数
+
+#### 1. initializer_list形参
+
+如果函数的实参数量未知但是全部实参的类型都相同，我们可以使用initializer_list类型的形参（C++11新标准）。和vector一样，initializer_list也是一种模板类型。
+
+下面给出一个例子，需要注意的是，含有initializer_list形参的函数也可以同时拥有其他形参。另外，如果想给initializer_list形参传递一个实参的序列，必须把序列**放在一对花括号内**：
+
+```c++
+string func(initializer_list<string> li) {
+	string str("");
+	for(auto beg=li.begin(); beg!=li.end(); ++beg)
+		str += *beg;
+	return str;
+}
+
+int main() {
+	cout << func({"This"," ","is"," ","C++"}) << endl;
+	return 0;
+}
+```
+
+#### 2. 占位符...形参
+
+与c语言一致，见上文。
+
+### 2.2 可变参数模板
+
+C++11 中引入了新的功能，***可变参数模版***，语法如下：
+
+```c++
+template <typename T, typename ... Args>
+void func(T t,Args ... args);
+```
+
+这里面，***Args*** 称之为模板参数包（template parameter pack），表示模板参数位置上的变长参数，
+
+***args*** 称之为函数参数包（function parameter pack），表示函数参数位置上的变长参数
+
+可以使用 ***sizeof...()*** 获取可变参数数目
+
+先看一个示例：
+
+```c++
+template<typename... Args>
+void print(Args... args) {
+    int num = sizeof...(args);
+    printf("%d\n", num);
+}
+int main() {
+    print(1, 2, "123", 4); // 4
+    return 0;
+}
+```
+
+遍历可变参数的时候，有两种遍历方式：
+
+#### 1. 递归遍历
+
+可变参数一般使用递归的方式进行遍历，利用模板的推导机制，每次从可变参数中取出第一个元素，直到包为空
+
+缺点：递归毕竟是使用栈内存，过多的递归层级容易导致爆栈的发生
+
+```c++
+template<typename T>
+void print(const T& val) {
+    cout << val << endl;
+}
+template<typename T, typename... Args>
+void print(const T &value, Args... args) {
+    cout << value << endl;
+    print(args...);
+}
+int main() {
+    print(1, 2, "333", 4);
+    return 0;
+}
+```
+
+
+
+#### 2. 非递归遍历
+
+利用 ***std::initializer_list*** ，即初始化列表展开可变参数，这里是C++17引入的折叠表达式。
+
+```c++
+template<typename T>
+void run(const T &t)
+{
+    cout << t << endl;
+}
+template<typename... Args>
+void print(Args... args)
+{
+    std::initializer_list<int>{(run(args), 0)...};
+}
+int main()
+{
+    print(1, 2, "333as", 4);
+    return 0;
+}
+```
