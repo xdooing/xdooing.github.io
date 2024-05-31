@@ -9,7 +9,7 @@ pin: true
 toc: true
 comments: true
 
-math: true
+math: false
 mermaid: true
 
 typora-root-url: ../../xdooing.github.io
