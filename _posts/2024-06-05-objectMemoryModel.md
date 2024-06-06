@@ -223,6 +223,10 @@ int main() {
         ((Base*)ptr)->print();                          // 1. 对象调用
         std::cout << "call with vtable" << std::endl;
         ((print_func_type)print_func_ptr)((void*)ptr);  // 2. vtable调用
+        
+        // 调用析构函数，调用第二个
+        typedef void(*destructor_func_type)(void*);
+        ((destructor_func_type)destructor_func2_ptr)((void*)ptr);
 
     }
 
@@ -246,6 +250,7 @@ call with object
 [Base] address: 0x557876f30eb0 data: 100
 call with vtable
 [Base] address: 0x557876f30eb0 data: 100
+destructor: 0x602000000010
 
 base 1 address: 0x557876f30ed0
   vptr address: 0x557876f30ed0 vptr: 0x557875f04d40
@@ -260,6 +265,7 @@ call with object
 [Base] address: 0x557876f30ed0 data: 200
 call with vtable
 [Base] address: 0x557876f30ed0 data: 200
+destructor: 0x602000000030
 ```
 
 以上代码有几点需要说明：
@@ -275,17 +281,205 @@ call with vtable
 使用GCC查看内存布局
 
 ```shell
-g++ -O0 -std=c++11 -fdump-class-hierarchy -fsanitize=address test.cpp
+g++ -O0 -std=c++11 -fdump-lang-class -fsanitize=address test.cpp
 ```
 
 - `-O0`：表示不做编译器优化
-- `-fdump-class-hierarchy`: 会dump出内存布局
+- `-fdump-lang-class`: 会dump出内存布局。GCC7.x及更早的版本中为 `-fdump-class-hierarchy`，在GCC8.0中被删除
 - `-std=c++11`: 使用C++11标准
 - `-fsanitize=address`:开启内存检查
 
+来看看dump出来的结果：
+
+```
+Vtable for Base
+Base::_ZTV4Base: 5 entries
+0     (int (*)(...))0
+8     (int (*)(...))(& _ZTI4Base)
+16    (int (*)(...))Base::~Base
+24    (int (*)(...))Base::~Base
+32    (int (*)(...))Base::print
+
+Class Base
+   size=12 align=1
+   base size=12 base align=1
+Base (0x0x7f7315fa41e0) 0
+    vptr=((& Base::_ZTV4Base) + 16)
+```
+
+可以看出来，Base类大小为12，按照1字节对齐。vptr指向了虚表首地址+16的位置。并且有两个`Base:~Base`的虚函数。
+
+**总结：**
+
+1. 两个Instance本身的地址和vptr/data的地址均不同，说明这部分数据确实是存放在实例本身的。
+2. 虚表和虚函数的地址都不变，说明被所有实例共享。
+3. 类的成员函数本质上也是普通函数，只是默认有了个this指针，通过vtable的直接调用也可以证实。
+4. 虚析构函数会生成两个虚函数，前者是对象析构但不调用`delete()`，相当于手动调用析构函数`obj->~Base()`，后者是析构且调用`delete()`，相当于`delete obj`。将案例中的析构改为调用第一个的话，就会报内存泄露的错误了。[参考 CXX API](https://itanium-cxx-abi.github.io/cxx-abi/abi.html#vtable-components)
 
 
 
+## 继承
 
+### 1. 单继承
 
+来看代码，B继承A，C继承B
+
+```c++
+#include <iostream>
+
+#pragma pack(push, 1)
+class A {
+public:
+    A(int a) : data_(a) {}
+    virtual ~A() { std::cout << "[A] destructor: " << this << std::endl; }
+    virtual void print() {
+        std::cout << "[A] address: " << this
+                  << " a: " << &(data_) << " " << data_
+                  << std::endl;
+    }
+public:
+    int data_;
+};
+
+class B : public A {
+public:
+    B(int a, int b) : A(a), data_(b) {}
+    virtual ~B() { std::cout << "[B] destructor: " << this << std::endl; }
+    virtual void printB() {
+        std::cout << "[B] address: " << this
+                  << " a: " << &(A::data_) << " " << A::data_
+                  << " b: " << &(data_) << " " << data_
+                  << std::endl;
+    }
+public:
+    int data_;
+};
+
+class C : public B {
+public:
+    C(int a, int b, int c) : B(a, b), data_(c) {}
+    virtual ~C() { std::cout << "[C] destructor: " << this << std::endl; }
+    virtual void print() {
+        std::cout << "[C] address: " << this
+                  << " a: " << &(A::data_) << " " << A::data_
+                  << " b: " << &(B::data_) << " " << B::data_
+                  << " c: " << &(data_) << " " << data_
+                  << std::endl;
+    }
+public:
+    int data_;
+};
+#pragma pack(pop)
+
+int main() {
+    std::cout << "sizeof A: " << sizeof(A) 
+              << " B: " << sizeof(B)
+              << " C: " << sizeof(C) << std::endl;
+    
+    A* a = new A(100);
+    A* b = new B(100, 200);
+    A* c = new C(100, 200, 300);
+
+    a->print();         // A print
+    b->print();         // A print
+    ((B*)b)->printB();  // B print
+    c->print();         // C print
+    ((B*)c)->printB();  // B print
+
+    delete a;
+    delete b;
+    delete c;
+
+    return 0;
+}
+```
+
+输出结果为：
+
+```
+sizeof A: 12 B: 16 C: 20
+[A] address: 0x602000000010 a: 0x602000000018 100
+[A] address: 0x602000000030 a: 0x602000000038 100
+[B] address: 0x602000000030 a: 0x602000000038 100 b: 0x60200000003c 200
+[C] address: 0x603000000010 a: 0x603000000018 100 b: 0x60300000001c 200 c: 0x603000000020 300
+[B] address: 0x603000000010 a: 0x603000000018 100 b: 0x60300000001c 200
+[A] destructor: 0x602000000010
+[B] destructor: 0x602000000030
+[A] destructor: 0x602000000030
+[C] destructor: 0x603000000010
+[B] destructor: 0x603000000010
+[A] destructor: 0x603000000010
+```
+
+GCC查看一下内存布局：
+
+```
+Vtable for A
+A::_ZTV1A: 5 entries
+0     (int (*)(...))0
+8     (int (*)(...))(& _ZTI1A)
+16    (int (*)(...))A::~A
+24    (int (*)(...))A::~A
+32    (int (*)(...))A::print
+
+Class A
+   size=12 align=1
+   base size=12 base align=1
+A (0x0x7f0fa4c3a1e0) 0
+    vptr=((& A::_ZTV1A) + 16)
+    
+Vtable for B
+B::_ZTV1B: 6 entries
+0     (int (*)(...))0
+8     (int (*)(...))(& _ZTI1B)
+16    (int (*)(...))B::~B
+24    (int (*)(...))B::~B
+32    (int (*)(...))A::print
+40    (int (*)(...))B::printB
+
+Class B
+   size=16 align=1
+   base size=16 base align=1
+B (0x0x7f0fa4c48d00) 0
+    vptr=((& B::_ZTV1B) + 16)
+  A (0x0x7f0fa4c3af00) 0
+      primary-for B (0x0x7f0fa4c48d00)
+
+Vtable for C
+C::_ZTV1C: 6 entries
+0     (int (*)(...))0
+8     (int (*)(...))(& _ZTI1C)
+16    (int (*)(...))C::~C
+24    (int (*)(...))C::~C
+32    (int (*)(...))C::print
+40    (int (*)(...))B::printB
+
+Class C
+   size=20 align=1
+   base size=20 base align=1
+C (0x0x7f0fa4c48ea0) 0
+    vptr=((& C::_ZTV1C) + 16)
+  B (0x0x7f0fa4c48f08) 0
+      primary-for C (0x0x7f0fa4c48ea0)
+    A (0x0x7f0fa4c87480) 0
+        primary-for B (0x0x7f0fa4c48f08)
+```
+
+**总结**
+
+1. A和之前的Base一样，没有啥好说的。大小`12 = vptr+int`。
+2. B继承A。同时B也定义了自己的成员变量（虽然和A的相同，但二者不是同一个变量，可以通过obj->A::data_来访问父类的对象）。因此大小是`16 = vptr + A::int + B::int`。
+3. C继承B。也定义了自己的成员变量。因此大小是`20 = vptr + A::int + B::int + C::int`。
+4. 通过每个`print`和`printB`的打印结果可以看出，派生类先存放了自己的基类的数据，之后才存放自己的数据
+
+**关于虚表**
+
+每个类都有且只有一个虚表对象。
+
+1. A和Base一样就不解释了。
+2. B继承了A的`print`方法，同时自己又定义了`printB`方法，因此B复制了A的虚表结构，除了改了析构函数的地址外，还新增了`printB`的指针。
+3. C继承了B，同时覆盖了`print`方法。因此C复制了B的虚表，修改了析构函数，并修改了`print`函数的指针。
+4. 可以总结个规律：**单继承下，派生类有且只有一个虚表，相当于直接将基类的虚表复制一次，替换掉自己的覆盖的虚函数，并追加自己新增的虚函数。**
+
+### 2. 多继承
 
