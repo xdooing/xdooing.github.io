@@ -3,7 +3,7 @@ title: C/C++可变参数
 date: 2024-05-31 00:00:00 +0800
 categories: [C/C++]
 tags: [编程]
-pin: true
+pin: false
 
 
 toc: true

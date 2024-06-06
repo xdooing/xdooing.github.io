@@ -3,7 +3,7 @@ title: 第一篇博文
 date: 2023-10-05 17:34:00 +0800
 categories: [随笔]
 tags: [生活]
-pin: true
+pin: false
 
 
 toc: true
