@@ -29,7 +29,11 @@ typora-root-url: ../../xdooing.github.io
 
 
 
-> 参考链接：https://www.miaoerduo.com/2023/01/19/cpp-object-model/
+> 参考链接：
+>
+> https://www.miaoerduo.com/2023/01/19/cpp-object-model/
+>
+> https://www.cnblogs.com/pandamohist/p/13882020.html
 
 
 
@@ -484,3 +488,221 @@ C (0x0x7f0fa4c48ea0) 0
 ### 2. 多继承
 
 多继承比单继承复杂了很多。而且多继承一致被很多人诟病，像Java就直接不支持多继承。这里我们不考虑基类重名等情况。
+
+来看代码，C继承A和B
+
+```c++
+#include <iostream>
+
+#pragma pack(push, 1)
+class A {
+public:
+    A(int a) : data_(a) {}
+    virtual ~A() { std::cout << "[A] destructor: " << this << std::endl; }
+    virtual void printA1() {
+        std::cout << "[A1] address: " << this
+                  << " " << &(data_) << " " << data_
+                  << std::endl;
+    }
+    virtual void printA2() {
+        std::cout << "[A2] address: " << this
+                  << " " << &(data_) << " " << data_
+                  << std::endl;
+    }
+public:
+    int data_;
+};
+
+class B {
+public:
+    B(int a) : data_(a) {}
+    virtual ~B() { std::cout << "[B] destructor: " << this << std::endl; }
+    virtual void printB1() {
+        std::cout << "[B1] address: " << this
+                  << " " << &(data_) << " " << data_
+                  << std::endl;
+    }
+    virtual void printB2() {
+        std::cout << "[B2] address: " << this
+                  << " " << &(data_) << " " << data_
+                  << std::endl;
+    }
+public:
+    int data_;
+};
+
+class C : public A, public B {
+public:
+    C(int a, int b, int c) : A(a), B(b), data_(c) {}
+    virtual ~C() { std::cout << "[C] destructor: " << this << std::endl; }
+    virtual void printB2() {
+        std::cout << "[C B2] address: " << this
+                  << " a: " << &(A::data_) << " " << A::data_ << " "
+                  << " b: " << &(B::data_) << " " << B::data_ << " "
+                  << " c: " << &data_     << " " << data_ << std::endl;
+    }
+    virtual void printC() {
+        std::cout << "[C] address: " << this
+                  << " a: " << &(A::data_) << " " << A::data_ << " "
+                  << " b: " << &(B::data_) << " " << B::data_ << " "
+                  << " c: " << &data_     << " " << data_ << std::endl;
+    }
+
+public:
+    int data_;
+};
+
+#pragma pack(pop)
+
+
+int main() {
+    std::cout << "sizeof A: " << sizeof(A) 
+              << " B: " << sizeof(B)
+              << " C: " << sizeof(C) << std::endl;
+    
+    C* c = new C(100, 200, 300);
+
+    std::cout << "\n" << "call with C*" << std::endl;
+    c->printA1();
+    c->printA2();
+    c->printB1();
+    c->printB2();
+    c->printC();
+
+    // for A
+    std::cout << "\n" << "call with dynamic_cast<A*>: " << dynamic_cast<A*>(c) << std::endl;
+    dynamic_cast<A*>(c)->printA1();
+    dynamic_cast<A*>(c)->printA2();
+    std::cout << "\n" << "call with static_cast<A*>: " << static_cast<A*>(c) << std::endl;
+    static_cast<A*>(c)->printA1();
+    static_cast<A*>(c)->printA2();
+    std::cout << "\n" << "call with reinterpret_cast<A*>: " << reinterpret_cast<A*>(c) << std::endl;
+    reinterpret_cast<A*>(c)->printA1();
+    reinterpret_cast<A*>(c)->printA2();
+
+    // for B
+    std::cout << "\n" << "call with dynamic_cast<B*>: " << dynamic_cast<B*>(c) << std::endl;
+    dynamic_cast<B*>(c)->printB1();
+    dynamic_cast<B*>(c)->printB2();
+    std::cout << "\n" << "call with static_cast<B*>: " << static_cast<B*>(c) << std::endl;
+    static_cast<B*>(c)->printB1();
+    static_cast<B*>(c)->printB2();
+    std::cout << "\n" << "call with reinterpret_cast<B*>: " << reinterpret_cast<B*>(c) << std::endl;
+    reinterpret_cast<B*>(c)->printB1();
+    reinterpret_cast<B*>(c)->printB2();
+
+    std::cout << std::endl;
+
+    delete c;
+
+    return 0;
+}
+```
+
+输出结果：
+
+```
+sizeof A: 12 B: 12 C: 28
+
+call with C*
+[A1] address: 0x556c941792c0 0x556c941792c8 100
+[A2] address: 0x556c941792c0 0x556c941792c8 100
+[B1] address: 0x556c941792cc 0x556c941792d4 200
+[C B2] address: 0x556c941792c0 a: 0x556c941792c8 100  b: 0x556c941792d4 200  c: 0x556c941792d8 300
+[C] address: 0x556c941792c0 a: 0x556c941792c8 100  b: 0x556c941792d4 200  c: 0x556c941792d8 300
+
+call with dynamic_cast<A*>: 0x556c941792c0
+[A1] address: 0x556c941792c0 0x556c941792c8 100
+[A2] address: 0x556c941792c0 0x556c941792c8 100
+
+call with static_cast<A*>: 0x556c941792c0
+[A1] address: 0x556c941792c0 0x556c941792c8 100
+[A2] address: 0x556c941792c0 0x556c941792c8 100
+
+call with reinterpret_cast<A*>: 0x556c941792c0
+[A1] address: 0x556c941792c0 0x556c941792c8 100
+[A2] address: 0x556c941792c0 0x556c941792c8 100
+
+call with dynamic_cast<B*>: 0x556c941792cc
+[B1] address: 0x556c941792cc 0x556c941792d4 200
+[C B2] address: 0x556c941792c0 a: 0x556c941792c8 100  b: 0x556c941792d4 200  c: 0x556c941792d8 300
+
+call with static_cast<B*>: 0x556c941792cc
+[B1] address: 0x556c941792cc 0x556c941792d4 200
+[C B2] address: 0x556c941792c0 a: 0x556c941792c8 100  b: 0x556c941792d4 200  c: 0x556c941792d8 300
+
+call with reinterpret_cast<B*>: 0x556c941792c0
+[A1] address: 0x556c941792c0 0x556c941792c8 100
+[A2] address: 0x556c941792c0 0x556c941792c8 100
+
+[C] destructor: 0x556c941792c0
+[B] destructor: 0x556c941792cc
+[A] destructor: 0x556c941792c0
+```
+
+dump一下内存布局：
+
+```
+Vtable for A
+A::_ZTV1A: 6 entries
+0     (int (*)(...))0
+8     (int (*)(...))(& _ZTI1A)
+16    (int (*)(...))A::~A
+24    (int (*)(...))A::~A
+32    (int (*)(...))A::printA1
+40    (int (*)(...))A::printA2
+
+Class A
+   size=12 align=1
+   base size=12 base align=1
+A (0x0x7f37630261e0) 0
+    vptr=((& A::_ZTV1A) + 16)
+
+Vtable for B
+B::_ZTV1B: 6 entries
+0     (int (*)(...))0
+8     (int (*)(...))(& _ZTI1B)
+16    (int (*)(...))B::~B
+24    (int (*)(...))B::~B
+32    (int (*)(...))B::printB1
+40    (int (*)(...))B::printB2
+
+Class B
+   size=12 align=1
+   base size=12 base align=1
+B (0x0x7f3763026e40) 0
+    vptr=((& B::_ZTV1B) + 16)
+
+Vtable for C
+C::_ZTV1C: 14 entries
+0     (int (*)(...))0
+8     (int (*)(...))(& _ZTI1C)
+16    (int (*)(...))C::~C
+24    (int (*)(...))C::~C
+32    (int (*)(...))A::printA1
+40    (int (*)(...))A::printA2
+48    (int (*)(...))C::printB2
+56    (int (*)(...))C::printC
+64    (int (*)(...))-12
+72    (int (*)(...))(& _ZTI1C)
+80    (int (*)(...))C::_ZThn12_N1CD1Ev
+88    (int (*)(...))C::_ZThn12_N1CD0Ev
+96    (int (*)(...))B::printB1
+104   (int (*)(...))C::_ZThn12_N1C7printB2Ev
+
+Class C
+   size=28 align=1
+   base size=28 base align=1
+C (0x0x7f37630cf8c0) 0
+    vptr=((& C::_ZTV1C) + 16)
+  A (0x0x7f3763073420) 0
+      primary-for C (0x0x7f37630cf8c0)
+  B (0x0x7f3763073480) 12
+      vptr=((& C::_ZTV1C) + 80)
+```
+
+**总结**
+
+1. A和B一目了然，大小 `12 = data_ + vptr`
+2. C继承A和B，顺序是先A再B。C中存放了A、B的数据，并且有两个虚指针（后续解释），因此大小为`28 = vptr + A::int + vptr + B::int + C::int`。
+3. C的内存模型中有**2个**虚函数表。一个属于基类A，另一个属于基类B。同时派生类C的虚函数是**放在第一张虚函数表**中。按照先前的顺序：先基类，再派生，先声明，先存储。但是有虚函数的类要优先考虑。这里基类A和B还有派生类都含有虚函数。那么先看基类，按照先声明先存储的顺序，A基类相对B基类先声明，故基类A的虚函数表指针首先被存储，接着再是基类A的成员变量，然后是基类B的虚函数表指针，基类B的成员变量。最后是派生类。
