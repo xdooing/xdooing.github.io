@@ -571,6 +571,9 @@ nautilus filename   #ps -ef | grep -i desktop 查看是哪种桌面环境
 scp xiedong@10.0.1.3:/home/xiedong/test.cpp .  #从远程主机拷贝文件到当前目录
 scp text.cpp xiedong@10.0.1.3:/home/xiedong/   #将本地文件拷贝到远程主机
 
+#通过其他server登录当前server -- ssh
+ssh xiedong@10.0.1.4
+
 #查看Linux的版本
 lsb_release -a
 
