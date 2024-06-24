@@ -680,8 +680,8 @@ set complete=enhance         #自动补全忽略大小写
 alias mv 'mv -i'
 alias cp 'cp -i'
 alias rm 'rm -i'
-alias cd "cd \!*; ls"        #进入目录后，自动显示目录下文件信息
-alias .. "cd .."
+alias cd 'cd \!*; ls'        #进入目录后，自动显示目录下文件信息
+alias .. 'cd ..'
 alias h "history"
 ```
 
