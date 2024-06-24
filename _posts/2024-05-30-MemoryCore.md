@@ -2,7 +2,7 @@
 title: 数据类型与存储
 date: 2024-05-30 00:00:00 +0800
 categories: [C/C++]
-tags: [编程]
+tags: [C/C++]
 pin: false
 
 
