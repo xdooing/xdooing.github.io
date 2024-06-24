@@ -29,7 +29,7 @@ typora-root-url: ../../xdooing.github.io
 
 ## 1. git cherry-pick
 
-[]: https://blog.csdn.net/weixin_44799217/article/details/128279250
+> 参考链接：https://blog.csdn.net/weixin_44799217/article/details/128279250
 
 通常开发时分两种情况：
 
