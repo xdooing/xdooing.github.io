@@ -123,13 +123,51 @@ int my_abs(int a)  {
 
 
 
-## 3. 位操作与空间压缩
+## 3. 位操作与字符串加密
 
-TODO...
+在实际开发中，有时会将项目数据save到文件，待使用时重新restore回去，但是现在有个问题，如果是int double等类型，直接save即可，但如果是const char*类型，直接保存在文件，会有风险，因此对字符串进行简单的加密或编码处理显得很有必要。
 
+按位**异或**操作有一些有趣的性质：
 
+1. 如果`a ^ b = c`，那么`c ^ b = a`。也就是说，应用同样的操作两次可以恢复原始数据。
+2. 对于任何数`x`，`x ^ 0 = x`，`x ^ x = 0`。
 
+这些性质使得**异或**操作成为一种非常简单的对称加密方法，既可以用于加密也可以用于解密。
 
+具体操作步骤如下：
+
+1. 对字符串中的每一个字符，使用`str[i] ^ CODER_NUMBER`来得到加密后的字符。
+2. 将加密后的字符保存到缓冲区中。
+
+例如，假设`CODER_NUMBER`为42（十进制）或`0x2A`（十六进制）
+
+```c++
+const char* str = "Hello, World!";
+char buffer[100];
+int CODER_NUMBER = 42;
+
+for (int i = 0; str[i] != '\0'; ++i) {
+    buffer[i] = str[i] ^ CODER_NUMBER;
+}
+buffer[strlen(str)] = '\0'; // 确保以null字符结尾
+```
+
+这样，`buffer`中就会存储加密后的字符串。
+
+如果要解密，只需再次执行同样的操作：
+
+```c++
+char decrypted[100];
+
+for (int i = 0; buffer[i] != '\0'; ++i) {
+    decrypted[i] = buffer[i] ^ CODER_NUMBER;
+}
+decrypted[strlen(buffer)] = '\0';
+```
+
+这样，`decrypted`中就会存储解密后的原始字符串。
+
+注意：这种方法虽然简单，但并不安全，只适用于对安全性要求不高的场合。如果需要更高的安全性，应使用更复杂的加密算法。
 
 
 
