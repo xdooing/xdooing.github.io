@@ -1,14 +1,17 @@
 ---
-# the default layout is 'page'
-icon: fas fa-info-circle
+title: 关于
+icon: fas fa-info
 order: 4
 ---
+- ### 本网站为个人编程技术汇总，记录学习过程中遇到的各种问题和相关技术的应用详情
 
-> Add Markdown syntax content to file `_tabs/about.md`{: .filepath } and it will show up on this page.
-{: .prompt-tip }
+  - 🏫  毕业于上海交通大学建筑系
+  - 💻  目前从事EDA软件开发
+  - 🏖️  联系方式：
+    - 微信：shovexdoo
+    - QQ：3410127564
+
+欢迎一起交流！
 
 
 
-
-
-xguwedyxgwy
