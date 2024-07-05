@@ -22,11 +22,5 @@ typora-root-url: ../../xdooing.github.io
 # 感谢关注～ 
 
 
-这里可以放代码片段噢～
-```c++
-//代码片段
-int main(){
-  hello world;
-}
-```
+第一篇博文，希望能坚持下来
 
