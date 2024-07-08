@@ -77,7 +77,10 @@ backtrace_symbols_fd()的参数buffer、size同backtrace_symbos()，不同之处
 注意：
 
 - backtrace的实现依赖于栈指针（fp寄存器），编译时，任何非0优化等级（-On），或加入栈指针优化`-fomit-frame-pointer`参数后，将不能得到正确的程序调用栈信息。
+
 - backtrace_symbols的实现需要符号名称的支持，编译时，需要加上-rdynamic选项（否则会无法获取func_name+offset）。
+
+  > 当调试程序时，如果希望在运行时能够看到所有符号的信息（例如用 `gdb` 进行调试），可以使用 `-rdynamic` 选项来确保符号表中包含了足够的信息。
 
 
 
