@@ -484,6 +484,12 @@ RD在晶圆级封装、面板级封装以及立体堆叠封装中有广泛的应
   - 表示将本地的dev-xiedong分支推送到远程主机origin，因为远程主机里面存在一个跟我本地分支同名的远程分支，因此这里后面就不写了，实际上也要加一个:dev-xiedong
 - git branch -d dev-xiedong
   - 删除本地dev-xiedong分支
+- git diff fileName
+  - 查看fileName修改了哪些内容
+
+- git diff --staged fileName
+  - 查看已经被add到暂存区的fileName的修改内容
+
 
 
 
