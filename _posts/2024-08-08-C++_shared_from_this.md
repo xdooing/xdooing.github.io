@@ -108,9 +108,7 @@ int main()
 
 `std::enable_shared_from_this `的实现比较复杂，但是实现原理则比较简单。它内部使用了`std::weak_ptr`来帮助完成指针相关控制数据的同步，而这份数据是在创建`std::shared_ptr`的时候完成的。我们来重点解析这一点。
 
-[关于weak_ptr]: https://subingwen.cn/cpp/weak_ptr/
-
-
+[关于weak_ptr](https://subingwen.cn/cpp/weak_ptr/ )
 
 ```c++
 template<class T>
