@@ -68,7 +68,7 @@ typora-root-url: ../../xdooing.github.io
 
 ## 3. 其他情况
 
-如果确认自己的服务器上已经有v6/printers.py文件，那么有一种比较简单的方法，直接修改launch.json：
+如果确认自己的服务器上已经有v6/printers.py文件，那么直接配置~/.gdbinit文件就行。如果懒得写文件，有一种比较简单的方法，直接修改launch.json：
 
 ```
 "setupCommands": [
