@@ -532,6 +532,10 @@ RD在晶圆级封装、面板级封装以及立体堆叠封装中有广泛的应
      > 将远程dev-xiedong分支的代码拉取到本地新建的分支dev-xiedong中。
   
   还有一个git fetch的操作，就是将所有远程分支拉到本地，然后git checkout到我们需要的分支，但是分支太多的话不太方便，因此少用。
+  
+- **自己本地分支修改后push到远程一个其他分支**
+
+  直接使用`git push origin <local-branch—name>:dev-tmp`这里的local-branch—name就是你自己本地的分支，dev-tmp是你push进的分支。
 
 
 
