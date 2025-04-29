@@ -21,6 +21,10 @@ typora-root-url: ../../xdooing.github.io
 
 > 记录一下工作中常用的Linux操作
 
+
+
+## 1. Linux常用记录
+
 ```shell
 #在当前目录下的所有文件中的test_run下的icpower.log文件中查找 Merge 关键字  ---注意grep可以在文件中查找
 grep Merge */test_run/icpower.log
@@ -65,6 +69,18 @@ lsb_release -a
 ps aux | grep 'Z'(或直接用top) 查看僵尸进程号child_id
 ps -o ppid= -p <child_id> 查看父进程parent_id
 kill -9 parent_id
+```
+
+
+
+## 2. Vim 常用记录
+
+```shell
+# :%! 
+	# 该指令可以把 buffer 作为 stdin 输入给一个程序，再用那个程序输出的内容替换 buffer
+	# % 表示整个文件的所有行（即当前缓冲区 buffer 的内容），当然这里也能写其他方式，例如$ 最后行，1,100之类的
+	# ! 表示将内容传递给外部程序
+	# 例如 :%!sort 用vim内置的sort对所有行进行排序，:2，5!sort对[2, 5]行进行排序
 ```
 
 
