@@ -19,7 +19,7 @@ typora-root-url: ../../xdooing.github.io
 
 
 
-> 记录一下工作中常用的Linux操作
+> 记录一下工作中常用的Linux操作。
 
 
 
