@@ -110,7 +110,7 @@ export https_proxy=http://192.168.31.43:7890
 
 ### 1. git cherry-pick
 
-[git cherry-pick]: https://blog.csdn.net/weixin_44799217/article/details/128279250
+[git cherry-pick](https://blog.csdn.net/weixin_44799217/article/details/128279250 )
 
 通常开发时分两种情况：
 
