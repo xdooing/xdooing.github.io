@@ -257,3 +257,17 @@ git fetch --unshallow
 - 如果存在冲突，需要合并或使用 `git push --force`（强制推送需谨慎，避免覆盖他人工作）。
 
 因此如果需要推送代码，clone时不要用--depth参数
+
+
+
+## 如何将远程一个分支拉到本地继续开发
+
+```shell
+#分支名 dev-tmp
+#1. 拉取所有分支信息
+git fetch
+#2. 查看所有远程分支
+git branch -r 或 git branch -a
+#3. 新建分支进行开发
+git checkout -b dev-tmp origin/dev-tmp
+```
