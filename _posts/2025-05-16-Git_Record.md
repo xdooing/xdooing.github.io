@@ -271,3 +271,17 @@ git branch -r 或 git branch -a
 #3. 新建分支进行开发
 git checkout -b dev-tmp origin/dev-tmp
 ```
+
+
+
+## push到远程被rejected [non-fast-forward]
+
+要处理也比较简单：
+
+1. 先将本地已经commit但是未push成功的修改隐藏起来 `git stash push`
+
+2. 更新本地分支，与远程分支保持一致 `git pull origin dev-tmp `或者`git pull --rebase`
+
+3. 恢复之前的修改 `git stash pop`
+
+4. 最后push到远程分支即可
