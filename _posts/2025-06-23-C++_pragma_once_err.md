@@ -1,5 +1,5 @@
 ---
-title: pragma once: 删除注释编译报错
+title: pragma once删除注释编译报错
 date: 2025-06-23 00:00:00 +0800
 categories: [C/C++]
 tags: [pragma once]
