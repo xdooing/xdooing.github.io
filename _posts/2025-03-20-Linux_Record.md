@@ -65,8 +65,9 @@ ssh xiedong@10.0.1.4
 #查看Linux的版本
 lsb_release -a
 
-#处理僵尸进程
-ps aux | grep 'Z'(或直接用top) 查看僵尸进程号child_id
+#处理僵尸进程 第二种更方便
+ps aux | grep 'Z' #1
+ps ux | awk '{if($8=="Z+") print}' #2 
 ps -o ppid= -p <child_id> 查看父进程parent_id
 kill -9 parent_id
 ```
