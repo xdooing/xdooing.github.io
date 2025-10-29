@@ -226,6 +226,28 @@ git revert  commit-hash
 
 
 
+## **push到远程后撤回对某个文件的修改**
+
+有时会遇到这种情况，修改了一个文件之后push到了远程分支，但是后面需要撤回对这个文件的修改，可以这么做：
+
+查看文件的修改log
+
+```shell
+git log /path/to/file
+```
+
+然后就可以看到每次提交修改的commit id
+
+有了需要回退的代码提交的标识符后，我们可以使用以下命令来回退文件的修改：
+
+```shell
+git checkout <commit-id> /path/to/file
+```
+
+执行命令后，Git 会将该文件恢复到指定的代码提交的状态。
+
+
+
 ## **shallow clone导致的push rejected**
 
 push到远程分支的时候显示 `remote rejected new_dev -> new_dev (shallow update not allowed)`
