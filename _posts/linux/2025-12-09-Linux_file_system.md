@@ -12,7 +12,7 @@ comments: true
 math: false
 mermaid: true
 
-typora-root-url: ../../xdooing.github.io
+typora-root-url: ../../../xdooing.github.io
 ---
 
 
@@ -22,5 +22,4 @@ typora-root-url: ../../xdooing.github.io
 
 
 ## 抽象
-
 
