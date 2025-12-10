@@ -251,3 +251,61 @@ ext文件系统每一个块组信息使用32字节描述，这32个字节称为�
 ### 3.2 如何根据inode号找到inode
 
 前面提到过，inode结构自身并没有保存inode号（同样，也没有保存文件名），那么inode号保存在哪里呢？目录的data block中保存了该目录中每个文件的inode号。
+
+另一个问题，既然inode中没有inode号，那么如何根据目录data block中的inode号找到inode table中对应的inode呢？
+
+实际上，只要有了inode号，就可以计算出inode表中对应该inode号的inode结构。在创建文件系统的时候，每个块组中的起始inode号以及inode table的起始地址都已经确定了，所以只要知道inode号，就能知道这个inode号和该块组起始inode号的偏移数量，再根据每个inode结构的大小(256字节或其它大小)，就能计算出来对应的inode结构。
+
+所以，目录的data block中的inode number和inode table中的inode是通过计算的方式一一映射起来的。从另一个角度上看，目录data block中的inode number是找到inode table中对应inode记录的唯一方式。
+
+考虑一种比较特殊的情况：目录data block的记录已经删除，但是该记录对应的inode结构仍然存在于inode table中。这种inode称为孤儿inode（orphan inode）：存在于inode table中，但却无法再索引到它。因为目录中已经没有该inode对应的文件记录了，所以其它进程将无法找到该inode，也就无法根据该inode找到该文件之前所占用的data block，这正是创建便删除所实现的真正临时文件，该临时文件只有当前进程和子进程才能访问。
+
+### 3.3 符号链接的存储方式
+
+符号链接即为软链接，类似于Windows操作系统中的快捷方式，它的作用是指向原文件或目录。
+
+软链接之所以也被称为特殊文件的原因是：它一般情况下不占用data block，仅仅通过它对应的inode记录就能将其信息描述完成；符号链接的大小是其指向目标路径占用的字符个数，例如某个符号链接的指向方式为"rmt --> ../sbin/rmt"，则其文件大小为11字节；只有当符号链接指向的目标的路径名较长(60个字节)时文件系统才会划分一个data block给它；它的权限如何也不重要，因它只是一个指向原文件的"工具"，最终决定是否能读写执行的权限由原文件决定，所以很可能ls -l查看到的符号链接权限为777。
+
+注意，软链接的block指针存储的是目标文件名。也就是说，链接文件的一切都依赖于其目标文件名。这就解释了为什么/mnt的软链接/tmp/mnt在/mnt挂载文件系统后，通过软链接就能进入/mnt所挂载的文件系统。究其原因，还是因为其目标文件名"/mnt"并没有改变。
+
+例如以下筛选出了/etc/下的符号链接，注意观察它们的权限和它们占用的空间大小。
+
+```
+[root@xuexi ~]# ll /etc/ | grep '^l'
+lrwxrwxrwx.  1 root root     22 Feb 18  2016 grub.conf -> ../boot/grub/grub.conf
+lrwxrwxrwx.  1 root root     11 Feb 18  2016 init.d -> rc.d/init.d
+lrwxrwxrwx.  1 root root      7 Feb 18  2016 rc -> rc.d/rc
+lrwxrwxrwx.  1 root root     10 Feb 18  2016 rc0.d -> rc.d/rc0.d
+lrwxrwxrwx.  1 root root     10 Feb 18  2016 rc1.d -> rc.d/rc1.d
+lrwxrwxrwx.  1 root root     10 Feb 18  2016 rc2.d -> rc.d/rc2.d
+lrwxrwxrwx.  1 root root     10 Feb 18  2016 rc3.d -> rc.d/rc3.d
+lrwxrwxrwx.  1 root root     10 Feb 18  2016 rc4.d -> rc.d/rc4.d
+lrwxrwxrwx.  1 root root     10 Feb 18  2016 rc5.d -> rc.d/rc5.d
+lrwxrwxrwx.  1 root root     10 Feb 18  2016 rc6.d -> rc.d/rc6.d
+lrwxrwxrwx.  1 root root     13 Feb 18  2016 rc.local -> rc.d/rc.local
+lrwxrwxrwx.  1 root root     15 Feb 18  2016 rc.sysinit -> rc.d/rc.sysinit
+lrwxrwxrwx.  1 root root     14 Feb 18  2016 redhat-release -> centos-release
+lrwxrwxrwx.  1 root root     11 Apr 10  2016 rmt -> ../sbin/rmt
+lrwxrwxrwx.  1 root root     14 Feb 18  2016 system-release -> centos-release
+```
+
+### 3.4 设备文件、FIFO、套接字文件
+
+关于这3种文件类型的文件只需要通过inode就能完全保存它们的信息，它们不占用任何数据块，所以它们是特殊文件。
+
+设备文件的主设备号和次设备号也保存在inode中。以下是/dev/下的部分设备信息。注意到它们的第5列和第6列信息，它们分别是主设备号和次设备号，主设备号标识每一种设备的类型，次设备号标识同种设备类型的不同编号；也注意到这些信息中没有大小的信息，因为设备文件不占用数据块所以没有大小的概念。
+
+```
+[root@xuexi ~]# ll /dev | tail
+crw-rw---- 1 vcsa tty       7, 129 Oct  7 21:26 vcsa1
+crw-rw---- 1 vcsa tty       7, 130 Oct  7 21:27 vcsa2
+crw-rw---- 1 vcsa tty       7, 131 Oct  7 21:27 vcsa3
+crw-rw---- 1 vcsa tty       7, 132 Oct  7 21:27 vcsa4
+crw-rw---- 1 vcsa tty       7, 133 Oct  7 21:27 vcsa5
+crw-rw---- 1 vcsa tty       7, 134 Oct  7 21:27 vcsa6
+crw-rw---- 1 root root     10,  63 Oct  7 21:26 vga_arbiter
+crw------- 1 root root     10,  57 Oct  7 21:26 vmci
+crw-rw-rw- 1 root root     10,  56 Oct  7 21:27 vsock
+crw-rw-rw- 1 root root      1,   5 Oct  7 21:26 zero
+```
+
