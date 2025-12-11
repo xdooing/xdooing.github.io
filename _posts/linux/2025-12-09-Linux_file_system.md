@@ -130,7 +130,7 @@ imap存在着和bmap和inode table一样需要解决的问题：如果文件系�
 
 假如现在block的大小是1KB，一个bmap完整占用一个block能标识1024*8= 8192个block(当然这8192个block是数据区和元数据区共8192个，因为元数据区分配的block也需要通过bmap来标识)。每个block是1K，每个块组是8192K即8M，创建1G的文件系统需要划分1024/8=128个块组，如果是1.1G的文件系统呢？128+12.8=128+13=141个块组。
 
-每个组的block数目是划分好了，但是每个组设定多少个inode号呢？inode table占用多少block呢？这需要由系统决定了，因为描述"每多少个数据区的block就为其分配一个inode号"的指标默认是我们不知道的，当然创建文件系统时也可以人为指定这个指标或者百分比例。见后文 [inode深入] 篇。
+每个组的block数目是划分好了，但是每个组设定多少个inode号呢？inode table占用多少block呢？这需要由系统决定了，因为描述"每多少个数据区的block就为其分配一个inode号"的指标默认是我们不知道的，当然创建文件系统时也可以人为指定这个指标或者百分比例。见后文 inode深入 篇。
 
 使用dumpe2fs可以将ext类的文件系统信息全部显示出来，当然bmap是每个块组固定一个block的不用显示，imap比bmap更小所以也只占用1个block不用显示。
 
@@ -309,3 +309,213 @@ crw-rw-rw- 1 root root     10,  56 Oct  7 21:27 vsock
 crw-rw-rw- 1 root root      1,   5 Oct  7 21:26 zero
 ```
 
+
+
+## 4. inode基础知识
+
+每个文件都有一个inode，在将inode关联到文件后系统将通过inode号来识别文件，而不是文件名。并且访问文件时将先找到inode，通过inode中记录的block位置找到该文件。
+
+### 4.1 硬链接
+
+虽然每个文件都有一个inode，但是存在一种可能：多个文件的inode相同，也就即inode号、元数据、block位置都相同，这是一种什么样的情况呢？能够想象这些inode相同的文件使用的都是同一条inode记录，所以代表的都是同一个文件，这些文件所在目录的data block中的inode号都是一样的，只不过各inode号对应的文件名互不相同而已。这种inode相同的文件在Linux中被称为"硬链接"。
+
+硬链接文件的inode都相同，每个文件都有一个"硬链接数"的属性，使用ls -l的第二列就是被硬链接数，它表示的就是该文件有几个硬链接。
+
+```
+[root@xuexi ~]# ls -l
+total 48
+drwxr-xr-x  5 root root  4096 Oct 15 18:07 700
+-rw-------. 1 root root  1082 Feb 18  2016 anaconda-ks.cfg
+-rw-r--r--  1 root root   399 Apr 29  2016 Identity.pub
+-rw-r--r--. 1 root root 21783 Feb 18  2016 install.log
+-rw-r--r--. 1 root root  6240 Feb 18  2016 install.log.syslog
+```
+
+例如下图描述的是dir1目录中的文件name1及其硬链接dir2/name2，右边分别是它们的inode和datablock。这里也看出了硬链接文件之间唯一不同的就是其所在目录中的记录不同。注意下图中有一列Link Count就是标记硬链接数的属性。
+
+![](/assets/blog_res/assets/10.png)
+
+每创建一个文件的硬链接，实质上是多一个指向该inode记录的inode指针，并且硬链接数加1。
+
+删除文件的实质是删除该文件所在目录data block中的对应的inode行，所以也是减少硬链接次数，由于block指针是存储在inode中的，所以不是真的删除数据，如果仍有其他inode号链接到该inode，那么该文件的block指针仍然是可用的。当硬链接次数为1时再删除文件就是真的删除文件了，此时inode记录中block指针也将被删除。
+
+不能跨分区创建硬链接，因为不同文件系统的inode号可能会相同，如果允许创建硬链接，复制到另一个分区时inode可能会和此分区已使用的inode号冲突。
+
+**硬链接只能对文件创建，无法对目录创建硬链接**。之所以无法对目录创建硬链接，是因为文件系统已经把每个目录的硬链接创建好了，它们就是相对路径中的"."和".."，分别标识当前目录的硬链接和上级目录的硬链接。每一个目录中都会包含这两个硬链接，它包含了两个信息：
+
+1. 一个没有子目录的目录文件的硬链接数是2，其一是目录本身，即该目录datablock中的"."，其二是其父目录datablock中该目录的记录，这两者都指向同一个inode号；
+2. 一个包含子目录的目录文件，其硬链接数是2+子目录数，因为每个子目录都关联一个父目录的硬链接".."。
+
+很多人在计算目录的硬链接数时认为由于包含了"."和".."，所以空目录的硬链接数是2，这是错误的，因为".."不是本目录的硬链接。另外，还有一个特殊的目录应该纳入考虑，即"/"目录，它自身是一个文件系统的入口，是自引用(下文中会解释自引用)的，所以"/"目录下的"."和".."的inode号相同，它自身不占用硬链接，因为其datablock中只记录inode号相同的"."和".."，不再像其他目录一样还记录一个名为"/"的目录，所以"/"的硬链接数也是2+子目录数，但这个2是"."和".."的结果。
+
+```
+[root@xuexi ~]# ln /tmp /mydata
+ln: `/tmp': hard link not allowed for directory
+```
+
+为什么文件系统自己创建好了目录的硬链接就不允许人为创建呢？从"."和".."的用法上考虑，如果当前目录为/usr，我们可以使用"./local"来表示/usr/local，但是如果我们人为创建了/usr目录的硬链接/tmp/husr，难道我们也要使用"/tmp/husr/local"来表示/usr/local吗？这其实已经是软链接的作用了。若要将其认为是硬链接的功能，这必将导致**硬链接维护的混乱**。
+
+不过，通过mount工具的"--bind"选项，可以将一个目录挂载到另一个目录下，实现伪"硬链接"，它们的内容和inode号是完全相同的。
+
+硬链接的创建方法： `ln file_target link_name` 。
+
+### 4.2 软链接
+
+软链接就是字符链接，链接文件默认指的就是字符链接文件(注意不是字符设备)，使用"l"表示其类型。
+
+硬链接不能跨文件系统创建，否则inode号可能会冲突。于是实现了软链接以便跨文件系统建立链接。既然是跨文件系统，那么软链接必须得有自己的inode号。
+
+软链接在功能上等价与Windows系统中的快捷方式，它指向原文件，原文件损坏或消失，软链接文件就损坏。**可以认为软链接inode记录中的指针内容是目标路径的字符串。**
+
+创建方式： `ln –s source_file softlink_name` ，记住是source_file<--link_name的指向关系(反箭头)，以前我老搞错位置。
+
+查看软链接的值： `readlink softlink_name` 
+
+在设置软链接的时候，source_file虽然不要求是绝对路径，但建议给绝对路径。是否还记得软链接文件的大小？它是根据软链接所指向路径的字符数计算的，例如某个符号链接的指向方式为"rmt --> ../sbin/rmt"，它的文件大小为11字节，也就是说只要建立了软链接后，软链接的指向路径是不会改变的，仍然是"../sbin/rmt"。如果此时移动软链接文件本身，它的指向是不会改变的，仍然是11个字符的"../sbin/rmt"，但此时该软链接父目录下可能根本就不存在/sbin/rmt，也就是说此时该软链接是一个被破坏的软链接。
+
+
+
+## 5. inode深入
+
+### 5.1 inode大小和划分
+
+inode大小为128字节的倍数，最小为128字节。它有默认值大小，它的默认值由/etc/mke2fs.conf文件中指定。不同的文件系统默认值可能不同。
+
+```
+[root@xuexi ~]# cat /etc/mke2fs.conf
+[defaults]
+        base_features = sparse_super,filetype,resize_inode,dir_index,ext_attr
+        enable_periodic_fsck = 1
+        blocksize = 4096
+        inode_size = 256
+        inode_ratio = 16384
+
+[fs_types]
+        ext3 = {
+                features = has_journal
+        }
+        ext4 = {
+                features = has_journal,extent,huge_file,flex_bg,uninit_bg,dir_nlink,extra_isize
+                inode_size = 256
+        }
+```
+
+同样观察到这个文件中还记录了blocksize的默认值和inode分配比率inode_ratio。inode_ratio=16384表示每16384个字节即16KB就分配一个inode号，由于默认blocksize=4KB，所以每4个block就分配一个inode号。当然分配的这些inode号只是预分配，并不真的代表会全部使用，毕竟每个文件才会分配一个inode号。但是分配的inode自身会占用block，而且其自身大小256字节还不算小，所以inode号的浪费代表着空间的浪费。
+
+既然知道了inode分配比率，就能计算出每个块组分配多少个inode号，也就能计算出inode table占用多少个block。
+
+如果文件系统中大量存储电影等大文件，inode号就浪费很多，inode占用的空间也浪费很多。但是没办法，文件系统又不知道你这个文件系统是用来存什么样的数据，多大的数据，多少数据。
+
+当然inode size、inode分配比例、block size都可以在创建文件系统的时候人为指定。
+
+### 5.2 ext文件系统预留的inode号
+
+Ext预留了一些inode做特殊特性使用，如下：某些可能并非总是准确，具体的inode号对应什么文件可以使用"find / -inum NUM"查看。
+
+- Ext4的特殊inode
+- Inode号  用途
+- 0   不存在0号inode，可用于标识目录data block中已删除的文件
+- 1   虚拟文件系统，如/proc和/sys
+- **2   根目录**
+- 3   ACL索引
+- 4   ACL数据
+- 5   Boot loader
+- 6   未删除的目录
+- 7   预留的块组描述符inode
+- 8   日志inode
+- 11   第一个非预留的inode，通常是lost+found目录
+
+所以在ext4文件系统的dumpe2fs信息中，能观察到fisrt inode号可能为11也可能为12。
+
+并且注意到"/"的inode号为2，这个特性在文件访问时会用上。
+
+需要注意的是，每个文件系统都会分配自己的inode号，不同文件系统之间是可能会出现使用相同inode号文件的。例如：
+
+```
+[root@xuexi ~]# find / -ignore_readdir_race -inum 2 -ls
+     2    4 dr-xr-xr-x  22 root     root         4096 Jun  9 09:56 /
+     2    2 dr-xr-xr-x   5 root     root         1024 Feb 25 11:53 /boot
+     2    0 c---------   1 root     root              Jun  7 02:13 /dev/pts/ptmx
+     2    0 -rw-r--r--   1 root     root            0 Jun  6 18:13 /proc/sys/fs/binfmt_misc/status
+     2    0 drwxr-xr-x   3 root     root            0 Jun  6 18:13 /sys/fs
+```
+
+从结果中可见，除了根的Inode号为2，还有几个文件的inode号也是2，它们都属于独立的文件系统，有些是虚拟文件系统，如/proc和/sys。
+
+### 5.3 ext2/3的inode直接、间接寻址
+
+前文说过，inode中保存了blocks指针，但是一条inode记录中能保存的指针数量是有限的，否则就会超出inode大小(128字节或256字节)。
+
+在ext2和ext3文件系统中，一个inode中最多只能有15个指针，每个指针使用i_block[n]表示。
+
+前12个指针i_block[0]到i_block[11]是直接寻址指针，每个指针指向一个数据区的block。如下图所示。
+
+![](/assets/blog_res/assets/11.png)
+
+第13个指针i_block[12]是一级间接寻址指针，它指向一个仍然存储了指针的block即i_block[12] --> Pointerblock --> datablock。
+
+第14个指针i_block[13]是二级间接寻址指针，它指向一个仍然存储了指针的block，但是这个block中的指针还继续指向其他存储指针的block，即i_block[13] --> Pointerblock1 --> PointerBlock2 --> datablock。
+
+第15个指针i_block[14]是三级间接寻址指针，它指向一个任然存储了指针的block，这个指针block下还有两次指针指向。即i_block[13] --> Pointerblock1 --> PointerBlock2 --> PointerBlock3 --> datablock。
+
+其中由于每个指针大小为4字节，所以每个指针block能存放的指针数量为BlockSize/4byte。例如blocksize为4KB，那么一个Block可以存放4096/4=1024个指针。
+
+如下图。
+
+![](/assets/blog_res/assets/12.png)
+
+为什么要分间接和直接指针呢？如果一个inode中15个指针全是直接指针，假如每个block的大小为1KB，那么15个指针只能指向15个block即15KB的大小，由于每个文件对应一个inode号，所以就限制了每个文件最大为15*1=15KB，这显然是不合理的。
+
+如果存储大于15KB的文件而又不太大的时候，就占用一级间接指针i_block[12]，这时可以存放指针数量为1024/4+12=268，所以能存放268KB的文件。
+
+如果存储大于268K的文件而又不太大的时候，就继续占用二级指针i_block[13]，这时可以存放指针数量为[1024/4]^2+1024/4+12=65804，所以能存放65804KB=64M左右的文件。
+
+如果存放的文件大于64M，那么就继续使用三级间接指针i_block[14]，存放的指针数量为[1024/4]^3+[1024/4]^2+[1024/4]+12=16843020个指针，所以能存放16843020KB=16GB左右的文件。
+
+如果blocksize=4KB呢？那么最大能存放的文件大小为([4096/4]^3+[4096/4]^2+[4096/4]+12)*4/1024/1024/1024=4T左右。
+
+当然这样计算出来的不一定就是最大能存放的文件大小，它还受到另一个条件的限制。这里的计算只是表明一个大文件是如何寻址和分配的。
+
+其实看到这里的计算数值，就知道ext2和ext3对超大文件的存取效率是低下的，它要核对太多的指针，特别是4KB大小的blocksize时。而ext4针对这一点就进行了优化，ext4使用extent的管理方式取代ext2和ext3的块映射，大大提高了效率也降低了碎片。
+
+
+
+## 6. 单文件系统中文件操作的原理
+
+在Linux上执行删除、复制、重命名、移动等操作时，它们是怎么进行的呢？还有访问文件时是如何找到它的呢？其实只要理解了前文中介绍的几个术语以及它们的作用就很容易知道文件操作的原理了。
+
+注：在这一小节所解释的都是在单个文件系统下的行为，在多个文件系统中如何请看下一个小节：多文件系统关联。
+
+### 6.1 读取文件
+
+当执行"cat /var/log/messages"命令在系统内部进行了什么样的步骤呢？该命令能被成功执行涉及了cat命令的寻找、权限判断以及messages文件的寻找和权限判断等等复杂的过程。这里只解释和本节内容相关的如何寻找到被cat的/var/log/messages文件。
+
+- **找到根文件系统的块组描述符表所在的blocks，读取GDT(已在内存中)找到inode table的block号。**
+
+这里要注意的是inode table的地址是存放在GDT当中的，见上文 2.3 块组描述符表(GDT)
+
+因为GDT总是和superblock在同一个块组，而superblock总是在分区的第1024-2047个字节，所以很容易就知道第一个GDT所在的块组以及GDT在这个块组中占用了哪些block。
+
+其实GDT早已经在内存中了，在系统开机的时候会挂载根文件系统，挂载的时候就已经将所有的GDT放进内存中。
+
+- **在inode table的block中定位到根"/"的inode，找出"/"指向的data block。**
+
+前文说过，ext文件系统预留了一些inode号，其中"/"的inode号为2，所以可以根据inode号直接定位根目录文件的data block。
+
+- **在"/"的datablock中记录了var目录名和var的inode号，找到该inode记录，inode记录中存储了指向var的block指针，所以也就找到了var目录文件的data block**。
+
+通过var目录的inode号，可以寻找到var目录的inode记录，但是在寻找的过程中，还需要知道该inode记录所在的块组以及所在的inode table，所以需要读取GDT，同样，GDT已经缓存到了内存中。
+
+- **在var的data block中记录了log目录名和其inode号，通过该inode号定位到该inode所在的块组及所在的inode table，并根据该inode记录找到log的data block。**
+
+- **在log目录文件的data block中记录了messages文件名和对应的inode号，通过该inode号定位到该inode所在的块组及所在的inode table，并根据该inode记录找到messages的data block。**
+
+- **最后读取messages对应的datablock。**
+
+将上述步骤中GDT部分的步骤简化后比较容易理解。如下:找到GDT-->找到"/"的inode-->找到/的数据块读取var的inode-->找到var的数据块读取log的inode-->找到log的数据块读取messages的inode-->找到messages的数据块并读取它们。
+
+当然，在每次定位到inode记录后，都会先将inode记录加载到内存中，然后查看权限，如果权限允许，将根据block指针找到对应的data block。
+
+### 6.2 删除、重命名和移动文件
+
+​              
