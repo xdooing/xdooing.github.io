@@ -307,3 +307,13 @@ git checkout -b dev-tmp origin/dev-tmp
 3. 恢复之前的修改 `git stash pop`
 
 4. 最后push到远程分支即可
+
+
+
+## 拉取截至某次commit的分支到本地
+
+工作中可能会遇到这种情况，不同的人将自己的代码merge到主仓，但某次提交出了问题，你想拉取这次提交之前的一次提交进行debug，这个时候可以这么做：
+
+1. 查看每次提交的commit哈希值，例如e8855039。`git log --oneline`
+2. 查找到哈希值之后，将代码拉到一个新分支。`git checkout -b debug_tmp e8855039`
+
