@@ -518,4 +518,275 @@ Ext预留了一些inode做特殊特性使用，如下：某些可能并非总是
 
 ### 6.2 删除、重命名和移动文件
 
-​              
+注意这里是不跨越文件系统的操作行为。
+
+- **删除文件分为普通文件和目录文件，知道了这两种类型的文件的删除原理，就知道了其他类型特殊文件的删除方法。**
+
+对于删除普通文件：
+
+1. 找到文件的inode和data block(根据前一个小节中的方法寻找)
+2. 将inode table中该inode记录中的data block指针删除
+3. 在imap中将该文件的inode号标记为未使用
+4. 在其所在目录的data block中将该文件名所在的记录行删除，删除了记录就丢失了指向inode的指针（实际上不是真的删除，直接删除的话会在目录data block的数据结构中产生空洞，所以实际的操作是将待删除文件的inode号设置为特殊的值0，这样下次新建文件时就可以重用该行记录
+5. 将bmap中data block对应的block号标记为未使用。
+
+对于删除目录文件：找到目录和目录下所有文件、子目录、子文件的inode和data block；在imap中将这些inode号标记为未使用；将bmap中将这些文件占用的 block号标记为未使用；在该目录的父目录的data block中将该目录名所在的记录行删除。需要注意的是，删除父目录data block中的记录是最后一步，如果该步骤提前，将报目录非空的错误，因为在该目录中还有文件占用。
+
+关于上面的(2)-(5)：当(2)中删除data block指针后，将无法再找到这个文件的数据；当(3)标记inode号未使用，表示该inode号可以被后续的文件重用；当(4)删除目录data block中关于该文件的记录，真正的删除文件，外界再也定位也无法看到这个文件了；当(5)标记data block为未使用后，表示开始释放空间，这些data block可以被其他文件重用。
+
+注意，在第(5)步之前，由于data block还未被标记为未使用，在superblock中仍然认为这些data block是正在使用中的。这表示尽管文件已经被删除了，但空间却还没有释放，df也会将其统计到已用空间中(df是读取superblock中的数据块数量，并计算转换为空间大小)。
+
+什么时候会发生这种情况呢？当一个进程正在引用文件时将该文件删除，就会出现文件已删除但空间未释放的情况。这时步骤已经进行到(4)，外界无法再找到该文件，但由于进程在加载该文件时已经获取到了该文件所有的data block指针，该进程可以获取到该文件的所有数据，但却暂时不会释放该文件空间。直到该进程结束，文件系统才将未执行的步骤(5)继续完成。这也是为什么有时候du的统计结果比df小的原因。
+
+- **重命名文件分为同目录内重命名和非同目录内重命名。非同目录内重命名实际上是移动文件的过程，见下文。**
+
+同目录内重命名文件的动作仅仅只是修改所在目录data block中该文件记录的文件名部分，不是删除再重建的过程。
+
+如果重命名时有文件名冲突(该目录内已经存在该文件名)，则提示是否覆盖。覆盖的过程是覆盖目录data block中冲突文件的记录。例如/tmp/下有a.txt和a.log，若将a.txt重命名为a.log，则提示覆盖，若选择覆盖，则/tmp的data block中关于a.log的记录被覆盖。
+
+- **移动文件**
+
+同文件系统下移动文件实际上是修改目标文件所在目录的data block，向其中添加一行指向inode table中待移动文件的inode指针，如果目标路径下有同名文件，则会提示是否覆盖，实际上是覆盖目录data block中冲突文件的记录，由于同名文件的inode记录指针被覆盖，所以无法再找到该文件的data block，也就是说该文件被标记为删除(如果多个硬链接数，则另当别论)。
+
+所以在同文件系统内移动文件相当快，仅仅在所在目录data block中添加或覆盖了一条记录而已。也因此，移动文件时，文件的inode号是不会改变的。
+
+对于不同文件系统内的移动，相当于先复制再删除的动作。见后文。
+
+![](/assets/blog_res/assets/13.png)
+
+关于文件移动，在Linux环境下有一个非常经典网上却又没任何解释的问题：/tmp/a/a能覆盖为/tmp/a吗？答案是不能，但windows能。为什么不能？[mv的本质](https://www.cnblogs.com/f-ck-need-u/p/6995195.html#blog1.6.4)
+
+### 6.3 存储和复制文件
+
+- 对于文件存储
+  - (1).读取GDT，找到各个(或部分)块组imap中未使用的inode号，并为待存储文件分配inode号；
+  - (2).在inode table中完善该inode号所在行的记录；
+  - (3).在目录的data block中添加一条该文件的相关记录；
+  - (4).将数据填充到data block中。
+    - 注意，填充到data block中的时候会调用block分配器：一次分配4KB大小的block数量，当填充完4KB的data block后会继续调用block分配器分配4KB的block，然后循环直到填充完所有数据。也就是说，如果存储一个100M的文件需要调用block分配器100*1024/4=25600次。
+    - 另一方面，在block分配器分配block时，block分配器并不知道真正有多少block要分配，只是每次需要分配时就分配，在每存储一个data block前，就去bmap中标记一次该block已使用，它无法实现一次标记多个bmap位。这一点在ext4中进行了优化。
+  - (5)填充完之后，去inode table中更新该文件inode记录中指向data block的寻址指针。
+- 对于复制，完全就是另一种方式的存储文件。步骤和存储文件的步骤一样。
+
+
+
+## 7. 多文件系统关联
+
+在单个文件系统中的文件操作和多文件系统中的操作有所不同。本文将对此做出非常详细的说明。
+
+### 7.1 根文件系统的特殊性
+
+这里要明确的是，任何一个文件系统要在Linux上能正常使用，必须挂载在某个已经挂载好的文件系统中的某个目录下，例如/dev/cdrom挂载在/mnt上，/mnt目录本身是在"/"文件系统下的。而且任意文件系统的一级挂载点必须是在根文件系统的某个目录下，因为只有"/"是自引用的。这里要说明挂载点的级别和自引用的概念。
+
+假如/dev/sdb1挂载在/mydata上，/dev/cdrom挂载在/mydata/cdrom上，那么/mydata就是一级挂载点，此时/mydata已经是文件系统/dev/sdb1的入口了，而/dev/cdrom所挂载的目录/mydata/cdrom是文件系统/dev/sdb1中的某个目录，那么/mydata/cdrom就是二级挂载点。一级挂载点必须在根文件系统下，**所以可简述为：文件系统2挂载在文件系统1中的某个目录下，而文件系统1又挂载在根文件系统中的某个目录下**。
+
+再解释自引用。首先要说的是，自引用的只能是文件系统，而文件系统表现形式是一个目录，所以自引用是指该目录的data block中，"."和".."的记录中的inode号都对应inode table中同一个inode记录，所以它们inode号是相同的，即互为硬链接。而**根文件系统是唯一可以自引用的文件系统**。
+
+```
+[root@xuexi /]# ll -ai /
+total 102
+     2 dr-xr-xr-x.  22 root root  4096 Jun  6 18:13 .
+     2 dr-xr-xr-x.  22 root root  4096 Jun  6 18:13 .. 
+```
+
+由此也能解释cd /.和cd /..的结果都还是在根下，这是自引用最直接的表现形式。
+
+```
+[root@xuexi tmp]# cd /.
+[root@xuexi /]#
+[root@xuexi tmp]# cd /..
+[root@xuexi /]#
+```
+
+注意，根目录下的"."和".."都是"/"目录的硬链接，且其datablock中不记录名为"/"的条目，因此除去根目录下子目录数后的硬链接数为2。
+
+```
+[root@server2 tmp]# a=$(ls -ld / | awk '{print $2}')
+[root@server2 tmp]# b=$(ls -l / | grep "^d" |wc -l)
+[root@server2 tmp]# echo $((a - b))
+2
+```
+
+### 7.2 挂载文件系统的细节
+
+挂载文件系统到某个目录下，例如"mount /dev/cdrom /mnt"，挂载成功后/mnt目录中的文件全都暂时不可见了，且挂载后权限和所有者(如果指定允许普通用户挂载)等的都改变了，知道为什么吗？
+
+下面就以通过"mount /dev/cdrom /mnt"为例，详细说明挂载过程中涉及的细节。
+
+在将文件系统/dev/cdrom(此处暂且认为它是文件系统)挂载到挂载点/mnt之前，挂载点/mnt是根文件系统中的一个目录，"/"的data block中记录了/mnt的一些信息，其中包括inode号inode_n，而在inode table中，/mnt对应的inode记录中又存储了block指针block_n，此时这两个指针还是普通的指针。
+
+![](/assets/blog_res/assets/14.png)
+
+当文件系统/dev/cdrom挂载到/mnt上后，/mnt此时就已经成为另一个文件系统的入口了，因此它需要连接两边文件系统的inode和data block。但是如何连接呢？如下图。
+
+![](/assets/blog_res/assets/15.png)
+
+在根文件系统的inode table中，为/mnt重新分配一个inode记录m，该记录的block指针block_m指向文件系统/dev/cdrom中的data block。既然为/mnt分配了新的inode记录m，那么在"/"目录的data block中，也需要修改其inode指针为inode_m以指向m记录。同时，原来inode table中的inode记录n就被标记为暂时不可用。
+
+block_m指向的是文件系统/dev/cdrom的data block，所以严格说起来，除了/mnt的元数据信息即inode记录m还在根文件系统上，/mnt的data block已经是在/dev/cdrom中的了。这就是挂载新文件系统后实现的跨文件系统，它将挂载点的元数据信息和数据信息分别存储在不同的文件系统上。
+
+挂载完成后，将在/proc/self/{mounts,mountstats,mountinfo}这三个文件中写入挂载记录和相关的挂载信息，并会将/proc/self/mounts中的信息同步到/etc/mtab文件中，当然，如果挂载时加了-n参数，将不会同步到/etc/mtab。
+
+而卸载文件系统，其实本质就是移除临时新建的inode记录(当然，在移除前会检查是否正在使用)及其指针，并将指针指回原来的inode记录，这样inode记录中的block指针也就同时生效而找回对应的data block了。由于卸载只是移除inode记录，所以使用挂载点和文件系统都可以实现卸载，因为它们是联系在一起的。
+
+下面是分析和结论。
+
+(1).挂载点挂载时的inode记录是新分配的。
+
+\# 挂载前挂载点/mnt的inode号
+
+```
+[root@server2 tmp]# ll -id /mnt
+100663447 drwxr-xr-x. 2 root root 6 Aug 12  2015 /mnt
+
+[root@server2 tmp]# mount /dev/cdrom /mnt
+```
+
+\# 挂载后挂载点的inode号
+
+```
+[root@server2 tmp]# ll -id /mnt 
+1856 dr-xr-xr-x    8 root root  2048 Dec 10  2015 mnt
+```
+
+由此可以验证，inode号确实是重新分配的。
+
+(2).挂载后，挂载点的内容将暂时不可见、不可用，卸载后文件又再次可见、可用。
+
+```
+# 在挂载前，向挂载点中创建几个文件
+[root@server2 tmp]# touch /mnt/a.txt
+[root@server2 tmp]# mkdir /mnt/abcdir
+```
+
+```
+# 挂载
+[root@server2 tmp]# mount /dev/cdrom /mnt
+
+# 挂载后，挂载点中将找不到刚创建的文件
+[root@server2 tmp]# ll /mnt
+total 636
+-r--r--r-- 1 root root     14 Dec 10  2015 CentOS_BuildTag
+dr-xr-xr-x 3 root root   2048 Dec 10  2015 EFI
+-r--r--r-- 1 root root    215 Dec 10  2015 EULA
+-r--r--r-- 1 root root  18009 Dec 10  2015 GPL
+dr-xr-xr-x 3 root root   2048 Dec 10  2015 images
+dr-xr-xr-x 2 root root   2048 Dec 10  2015 isolinux
+dr-xr-xr-x 2 root root   2048 Dec 10  2015 LiveOS
+dr-xr-xr-x 2 root root 612352 Dec 10  2015 Packages
+dr-xr-xr-x 2 root root   4096 Dec 10  2015 repodata
+-r--r--r-- 1 root root   1690 Dec 10  2015 RPM-GPG-KEY-CentOS-7
+-r--r--r-- 1 root root   1690 Dec 10  2015 RPM-GPG-KEY-CentOS-Testing-7
+-r--r--r-- 1 root root   2883 Dec 10  2015 TRANS.TBL
+
+# 卸载后，挂载点/mnt中的文件将再次可见
+[root@server2 tmp]# umount /mnt
+[root@server2 tmp]# ll /mnt
+total 0
+drwxr-xr-x 2 root root 6 Jun  9 08:18 abcdir
+-rw-r--r-- 1 root root 0 Jun  9 08:18 a.txt
+```
+
+之所以会这样，是因为挂载文件系统后，挂载点原来的inode记录暂时被标记为不可用，关键是没有指向该inode记录的inode指针了。在卸载文件系统后，又重新启用挂载点原来的inode记录，"/"目录下的mnt的inode指针又重新指向该inode记录。
+
+(3).挂载后，**挂载点的元数据和data block是分别存放在不同文件系统上的**。
+
+(4).挂载点即使在挂载后，也还是属于源文件系统的文件。
+
+### 7.3 多文件系统操作关联
+
+假如下图中的圆代表一块硬盘，其中划分了3个区即3个文件系统。其中根是根文件系统，/mnt是另一个文件系统A的入口，A文件系统挂载在/mnt上，/mnt/cdrom也是一个文件系统B的入口，B文件系统挂载在/mnt/cdrom上。每个文件系统都维护了一些inode table，这里假设图中的inode table是每个文件系统所有块组中的inode table的集合表。
+
+![](/assets/blog_res/assets/16.png)
+
+如何读取/var/log/messages呢？这是和"/"在同一个文件系统的文件读取，在前面单文件系统中已经详细说明了。
+
+但如何读取A文件系统中的/mnt/a.log呢？首先，从根文件系统找到/mnt的inode记录，这是单文件系统内的查找；然后根据此inode记录的block指针，定位到/mnt的data block中，这些block是A文件系统的data block；然后从/mnt的data block中读取a.log记录，并根据a.log的inode指针定位到A文件系统的inode table中对应a.log的inode记录；最后从此inode记录的block指针找到a.log的data block。至此，就能读取到/mnt/a.log文件的内容。
+
+下图能更完整的描述上述过程。
+
+![](/assets/blog_res/assets/17.png)
+
+那么又如何读取/mnt/cdrom中的/mnt/cdrom/a.rpm呢？这里cdrom代表的文件系统B挂载点位于/mnt下，所以又多了一个步骤。先找到"/"，再找到根中的mnt，进入到mnt文件系统中，找到cdrom的data block，再进入到cdrom找到a.rpm。也就是说，mnt目录文件存放位置是根，cdrom目录文件存放位置是mnt，最后a.rpm存放的位置才是cdrom。
+
+继续完善上图。如下。
+
+![](/assets/blog_res/assets/18.png)
+
+
+
+## 8. ext3文件系统的日志功能
+
+相比ext2文件系统，ext3多了一个日志功能。
+
+在ext2文件系统中，只有两个区：数据区和元数据区。如果正在向data block中填充数据时突然断电，那么下一次启动时就会检查文件系统中数据和状态的一致性，这段检查和修复可能会消耗大量时间，甚至检查后无法修复。之所以会这样是因为文件系统在突然断电后，它不知道上次正在存储的文件的block从哪里开始、哪里结束，所以它会扫描整个文件系统进行排除(也许是这样检查的吧)。
+
+而在创建ext3文件系统时会划分三个区：数据区、日志区和元数据区。每次存储数据时，先在日志区中进行ext2中元数据区的活动，直到文件存储完成后标记上commit才将日志区中的数据转存到元数据区。当存储文件时突然断电，下一次检查修复文件系统时，只需要检查日志区的记录，将bmap对应的data block标记为未使用，并把inode号标记未使用，这样就不需要扫描整个文件系统而耗费大量时间。
+
+虽说ext3相比ext2多了一个日志区转写元数据区的动作而导致ext3相比ext2性能要差一点，特别是写众多小文件时。但是由于ext3其他方面的优化使得ext3和ext2性能几乎没有差距。
+
+
+
+## 9. ext4文件系统
+
+回顾前面关于ext2和ext3文件系统的存储格式，它使用block为存储单元，每个block使用bmap中的位来标记是否空闲，尽管使用划分块组的方法优化提高了效率，但是一个块组内部仍然使用bmap来标记该块组内的block。对于一个巨大的文件，扫描整个bmap都将是一件浩大的工程。另外在inode寻址方面，ext2/3使用直接和间接的寻址方式，对于三级间接指针，可能要遍历的指针数量是非常非常巨大的。
+
+ext4文件系统的最大特点是在ext3的基础上使用区(extent，或称为段)的概念来管理。一个extent尽可能的包含物理上连续的一堆block。inode寻址方面也一样使用区段树的方式进行了改进。
+
+默认情况下，EXT4不再使用EXT3的block mapping分配方式 ，而改为Extent方式分配。
+
+以下是ext4文件系统中一个文件的inode属性示例，注意最后两行的EXTENTS。
+
+```
+Inode: 12   Type: regular    Mode:  0644   Flags: 0x80000
+Generation: 476513974    Version: 0x00000000:00000001
+User:     0   Group:     0   Size: 11
+File ACL: 0    Directory ACL: 0
+Links: 1   Blockcount: 8
+Fragment:  Address: 0    Number: 0    Size: 0
+ ctime: 0x5b628ca0:491d6224 -- Thu Aug  2 12:46:24 2018
+ atime: 0x5b628ca0:491d6224 -- Thu Aug  2 12:46:24 2018
+ mtime: 0x5b628ca0:491d6224 -- Thu Aug  2 12:46:24 2018
+crtime: 0x5b628ca0:491d6224 -- Thu Aug  2 12:46:24 2018
+Size of extra inode fields: 28
+EXTENTS:
+(0):33409
+```
+
+(1). 关于EXT4的结构特征
+
+EXT4在总体结构上与EXT3相似，大的分配方向都是基于相同大小的块组，每个块组内分配固定数量的inode、可能的superblock(或备份)及GDT。
+
+EXT4的inode 结构做了重大改变，为增加新的信息，大小由EXT3的128字节增加到默认的256字节，同时inode寻址索引不再使用EXT3的"12个直接寻址块+1个一级间接寻址块+1个二级间接寻址块+1个三级间接寻址块"的索引模式，而**改为4个Extent片断流**，每个片断流设定片断的起始block号及连续的block数量(有可能直接指向数据区，也有可能指向索引块区)。
+
+片段流即下图中索引节点(inde node block)部分的绿色区域，每个15字节，共60字节。
+
+![](/assets/blog_res/assets/19.png)
+
+(2). EXT4删除数据的结构更改。
+
+EXT4删除数据后，会依次释放文件系统bitmap空间位、更新目录结构、释放inode空间位。
+
+(3). ext4使用多block分配方式。
+
+在存储数据时，ext3中的block分配器一次只能分配4KB大小的Block数量，而且每存储一个block前就标记一次bmap。假如存储1G的文件，blocksize是4KB，那么每存储完一个Block就将调用一次block分配器，即调用的次数为1024*1024/4KB=262144次，标记bmap的次数也为1024*1024/4=262144次。
+
+而在ext4中根据区段来分配，可以实现调用一次block分配器就分配一堆连续的block，并在存储这一堆block前一次性标记对应的bmap。这对于大文件来说极大的提升了存储效率。
+
+
+
+## 10. ext类文件系统的缺点
+
+最大的缺点是它在创建文件系统的时候就划分好一切需要划分的东西，以后用到的时候可以直接进行分配，也就是说**它不支持动态划分和动态分配**。对于较小的分区来说速度还好，但是对于一个超大的磁盘，速度是极慢极慢的。例如将一个几十T的磁盘阵列格式化为ext4文件系统，可能你会因此而失去一切耐心。
+
+除了格式化速度超慢以外，ext4文件系统还是非常可取的。当然，不同公司开发的文件系统都各有特色，最主要的还是根据需求选择合适的文件系统类型。
+
+
+
+## 11. 虚拟文件系统VFS
+
+每一个分区格式化后都可以建立一个文件系统，Linux上可以识别很多种文件系统，那么它是如何识别的呢？另外，在我们操作分区中的文件时，并没有指定过它是哪个文件系统的，各种不同的文件系统如何被我们用户以无差别的方式操作呢？这就是虚拟文件系统的作用。
+
+虚拟文件系统为用户操作各种文件系统提供了通用接口，使得用户执行程序时不需要考虑文件是在哪种类型的文件系统上，应该使用什么样的系统调用来操作该文件。有了虚拟文件系统，只要将所有需要执行的程序调用VFS的系统调用就可以了，剩下的动作由VFS来帮忙完成。
+
+![](/assets/blog_res/assets/20.png)
