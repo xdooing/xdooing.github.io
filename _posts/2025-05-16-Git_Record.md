@@ -23,11 +23,11 @@ typora-root-url: ../../xdooing.github.io
 
 
 
-## **使用vpn代理**
+## 1. **使用vpn代理**
 
 > 开了VPN之后，git clone/push 仍然会失败，访问不到链接，是由于 git 默认不使用代理导致，配置 git 代理后可提升速度。
 
-### 1 查看vpn本地代理端口
+### 1.1 查看vpn本地代理端口
 
 不同 vpn 软件或安装的随机性导致每台机器的端口号并不一致，以显示为准。
 
@@ -41,7 +41,7 @@ typora-root-url: ../../xdooing.github.io
 
 显示端口号为 7890
 
-### 2. 配置git代理
+### 1.2 配置git代理
 
 **windows上使用git**
 
@@ -102,13 +102,13 @@ export https_proxy=http://192.168.31.43:7890
 
 
 
-## **将仓库1的commit转移到仓库2**
+## 2. **将仓库1的commit转移到仓库2**
 
 最近在进行开发的时候，遇到了一个棘手的事情（当然是对于git菜鸟的我来讲），公司之前的代码都在dev分支，最近开发了分布式之后，在dp分支开发了一段时间，因此我自己目前做的功能也往远程分支commit了几次，但是还没有merge到dp分支，然而分布式测试完成之后，要将dp分支替换用作接下来项目的主分支。
 
 这样一来，问题就出现了，相当于我本地代码的远程仓库被删除了，或者说仓库名与地址都改变了，现在我想将之前commit的代码以及正在开发的代码转移到新的仓库中继续开发，怎么做到呢？
 
-### 1. git cherry-pick
+### 2.1 git cherry-pick
 
 [git cherry-pick](https://blog.csdn.net/weixin_44799217/article/details/128279250)
 
@@ -119,7 +119,7 @@ export https_proxy=http://192.168.31.43:7890
 
 cherry-pick 和它的名称翻译一样，精心挑选，挑选一个我们需要的 commit 进行操作。它可以将在其他分支上的 commit 修改，移植到当前的分支。git cherry-pick命令的作用，就是将指定的提交（commit）应用于其他分支。
 
-### 2. 不同仓库之间移植commit
+### 2.2 不同仓库之间移植commit
 
 假如要将repo1中的某次commit移植到repo2中，主要分为以下步骤：
 
@@ -172,11 +172,11 @@ cherry-pick 和它的名称翻译一样，精心挑选，挑选一个我们需�
 
 
 
-## **撤回某次提交**
+## 3. **撤回某次提交**
 
 开发时push到远端之后，如果想撤回某次提交，主要方式有以下几种：
 
-### 1. git revert
+### 3.1 git revert
 
 `git revert` 命令会创建一个新的提交，用于撤销最近一次的提交。该命令会生成一个新的提交，其中包含了对之前提交的更改进行撤销的代码。这种方式相对安全，因为它会生成一个新的提交，保留了之前的提交历史。
 
@@ -186,7 +186,7 @@ git revert  commit-hash
 
 例如要撤回最近一次的提交，可以使用`git revert HEAD`
 
-### 2. git reset
+### 3.2 git reset
 
 `git reset` 命令可以用来撤销之前的提交。这有几种模式，包括 `soft`、`mixed`（默认）和 `hard`。
 
@@ -216,7 +216,7 @@ git revert  commit-hash
 
 `HEAD^`的意思是上一个版本，也可以写成 `HEAD~1`，如果进行了 **2** 次 **commit**，都想撤回，可以使用 `HEAD~2`
 
-### 3. 注意
+### 3.3 注意
 
 与`git revert`不同，`git reset`命令会改变提交历史。因此，如果你已经将代码推送到远程仓库，最好不要使用`git reset`来撤销提交，因为会导致分支历史的改变，可能会引起问题。
 
@@ -226,7 +226,7 @@ git revert  commit-hash
 
 
 
-## **push到远程后撤回对某个文件的修改**
+## 4. **push到远程后撤回对某个文件的修改**
 
 有时会遇到这种情况，修改了一个文件之后push到了远程分支，但是后面需要撤回对这个文件的修改，可以这么做：
 
@@ -248,16 +248,16 @@ git checkout <commit-id> /path/to/file
 
 
 
-## **shallow clone导致的push rejected**
+## 5. **shallow clone导致的push rejected**
 
 push到远程分支的时候显示 `remote rejected new_dev -> new_dev (shallow update not allowed)`
 
-### 1. 原因
+**1. 原因**
 
 - **浅克隆的局限性**：浅克隆通过 `--depth` 参数限制拉取的提交历史深度（例如仅拉取最新的一次提交）。虽然节省了时间和空间，但此类仓库无法正常推送新分支或更新引用，因为缺少必要的历史提交信息。
 - **Git 服务器的保护机制**：为了防止仓库损坏，Git 服务器会拒绝来自浅克隆的推送操作（`shallow update not allowed`）。
 
-### 2. 解决方法
+**2. 解决方法**
 
 检查是否是shallow clone，是的话返回true
 
@@ -271,7 +271,7 @@ git rev-parse --is-shallow-repository
 git fetch --unshallow
 ```
 
-### 3. 注意
+**3. 注意**
 
 如果远程已有 `new_dev` 分支：
 
@@ -282,7 +282,9 @@ git fetch --unshallow
 
 
 
-## 如何将远程一个分支拉到本地继续开发
+## 6. 如何将远程一个分支拉到本地继续开发
+
+本地已有工作目录的情况下，自己要在改工作目录重新新建一个分支进行开发，可以这么做：
 
 ```shell
 #分支名 dev-tmp
@@ -294,9 +296,26 @@ git branch -r 或 git branch -a
 git checkout -b dev-tmp origin/dev-tmp
 ```
 
+如果是直接新建工作目录，那么直接clone就可以
+
+```shell
+git clone --depth=1 -b dev-tmp http://url/project.git
+```
+
+对于第二种方法，这里有个需要注意的地方，如果你是拉取同事的代码进行debug，或继续开发，那么大概率这个代码是没有你自己模块的submodule的，因此他的submodule hash很有可能不是最新的，这样的话就不能直接拉取最新的submodule代码，而是要拉取指定hash的代码，可以这么做：
+
+```shell
+# 1. 查看子模块状态
+git submodule
+# 2. 进入子模块目录
+cd /path/submodule
+# 3. 使用哈希切换到指定版本
+git checkout 7a8f9c3b...
+```
 
 
-## push到远程被rejected [non-fast-forward]
+
+## 7. push到远程被rejected [non-fast-forward]
 
 要处理也比较简单：
 
@@ -310,11 +329,10 @@ git checkout -b dev-tmp origin/dev-tmp
 
 
 
-## 拉取截至某次commit的分支到本地
+## 8. 拉取截至某次commit的分支到本地
 
 工作中可能会遇到这种情况，不同的人将自己的代码merge到主仓，但某次提交出了问题，你想拉取这次提交之前的一次提交进行debug，这个时候可以这么做：
 
 1. 查看每次提交的commit哈希值，例如e8855039。`git log --oneline`
-2. 查找到哈希值之后，将代码拉到一个新分支。`git checkout -b debug_tmp e8855039`、
-3. ..
+2. 查找到哈希值之后，将代码拉到一个新分支。`git checkout -b debug_tmp e8855039`
 
