@@ -119,6 +119,19 @@ export https_proxy=http://192.168.31.43:7890
 
 cherry-pick 和它的名称翻译一样，精心挑选，挑选一个我们需要的 commit 进行操作。它可以将在其他分支上的 commit 修改，移植到当前的分支。git cherry-pick命令的作用，就是将指定的提交（commit）应用于其他分支。
 
+补充一下cherry-pick的用法：
+比如我想要将远程仓库中其他同事分支dev-tmp中的一次commit提交到我的分支，可以这么做:
+
+```shell
+# 拉取远程分支信息
+git fetch origin dev-tmp
+# 此时本地有了commit hash信息，直接cherry pick
+git cherry-pick <commit-hash>
+# 之后解决冲突，直接push
+```
+
+
+
 ### 2.2 不同仓库之间移植commit
 
 假如要将repo1中的某次commit移植到repo2中，主要分为以下步骤：
